@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+
+    stages {        
+        stage('Repo') {
+            steps {
+                git branch: 'main', url: 'https://github.com/ReddyNeo/helm.git'
+            }
+        }
+        stage('aws') {
+            steps {
+                withCredentials([aws(credentialsId: 'aws-credentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                  bat '''
+                    aws --version
+                    aws ec2 describe-instances --region ap-south-1
+                    aws eks describe-cluster --region ap-south-1 --name eks-cluster --query cluster.status
+                    '''
+                    script {
+                    bat ('aws eks update-kubeconfig --name TEST-eks --region ap-south-1')
+                    //sh "kubectl apply -f <K8S_DEPLOY_FILE>.yaml"
+                }
+                }
+            }
+        }
+        
+        stage('Install Helm') {
+                          steps {
+                bat 'curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 '
+           }
+        }
+        
+        
+       stage('helm test') {
+            steps {
+                bat '''
+                helm lint ./sonarqube
+                helm template ./sonarqube
+                helm install sonarqube ./helm/sonarqube
+                '''
+            }
+        }
+        
+        stage('Deploy SonarQube') {
+            steps {
+             dir('sonarqube') {
+          bat 'helm upgrade --install sonarqube .'
+        }
+      }
+    }
+        
+    }
+ 
+}
